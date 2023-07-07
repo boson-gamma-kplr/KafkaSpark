@@ -2,52 +2,52 @@ from kafka import KafkaProducer
 from time import sleep
 import requests
 import json
-import os
-import csv
-from datetime import datetime
-import requests # pour utiliser le protocole https pour récupéréer les données Alpha Vantage
-from datetime import datetime # pour manipuler le type date
-# import pytz # time zones
-from pyspark.sql.types import StructField, StructType, StringType, LongType, DoubleType, DateType, TimestampType
-import pytz
+
+# Endpoint de l'API Alpha Vantage
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey=demo'
 
 # Serveurs Kafka bootstrap
 bootstrap_servers = ['localhost:9092']
 
 # Topic Kafka pour produire des données
-topic = 'data-stream'
+topic = 'data-stream2'
 
 # Création d'un producer Kafka
-producer = KafkaProducer(bootstrap_servers=bootstrap_servers, api_version=(0, 10, 1))
-print(os.getcwd())
-directory = os.path.join(os.getcwd(), "data/alpha/STOX")
+producer = KafkaProducer(bootstrap_servers=bootstrap_servers,
+                         value_serializer=lambda m: json.dumps(m).encode('utf-8'))
 
-# Créer le répertoire s'il n'existe pas
-os.makedirs(directory, exist_ok=True)
-topics = ["MSFT", "AMZN", "GOOGL"]
 while True:
     # Make a request to the Alpha Vantage API
-    for topic in topics:
-        req = ("https://www.alphavantage.co/query?"+
-            "function=TIME_SERIES_INTRADAY"+
-            "&symbol=" + topic + 
-            "&interval=1min"+
-            "&datatype=csv"+
-            "&apikey=ZK5M5JBX3PEQ25D0")
-        
-        f = requests.get(req)
-        content = f.text
-        prefix = topic + ','
-
-        contentWithStockName = prefix.join(content.splitlines(True))
-        contentWithoutHeader = contentWithStockName.split("\n", 1)[1];
-        
-        # cdate et temps actuels
-        timestamp = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y%m%d_%H%M%S")
-
-        print(contentWithoutHeader)
-
-        producer.send(topic, value=bytes(contentWithoutHeader, 'utf-8'))
-    print('Waiting for next call ...')
-    sleep(60)
+    response = requests.get(url)
     
+    if response.status_code == 200:
+        data = response.json()
+        
+        # Vérifier si la clé 'Time Series (5min)' existe dans les données de réponse
+        if 'Time Series (5min)' in data:
+            time_series = data["Time Series (5min)"]
+            
+            for timestamp, values in time_series.items():
+                # Extraire les valeurs requises
+                open_price = values['1. open']
+                high_price = values['2. high']
+                low_price = values['3. low']
+                close_price = values['4. close']
+                volume = values['5. volume']
+                
+                # Créer un dictionnaire avec les valeurs extraites
+                price_data = {
+                    'timestamp': timestamp,
+                    'open': open_price,
+                    'high': high_price,
+                    'low': low_price,
+                    'close': close_price,
+                    'volume': volume
+                }
+                
+                # Convertir le dictionnaire en JSON et l'envoyer à Kafka
+                producer.send(topic, value=price_data)
+                
+                print("Price data sent to Kafka")
+        
+    sleep(60)  # Attendre 60 secondes avant de faire la prochaine requête à l'API

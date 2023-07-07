@@ -5,7 +5,7 @@ import json
 bootstrap_servers = ['localhost:9092']
 
 # topic kafka
-topic = 'data-stream'
+topic = 'data-stream2'
 
 # Creation d'un consumer kafka
 consumer = KafkaConsumer(topic,
