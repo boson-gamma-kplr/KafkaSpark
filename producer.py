@@ -50,3 +50,4 @@ while True:
         producer.send(topic, value=bytes(contentWithoutHeader, 'utf-8'))
     print('Waiting for next call ...')
     sleep(60)
+    
